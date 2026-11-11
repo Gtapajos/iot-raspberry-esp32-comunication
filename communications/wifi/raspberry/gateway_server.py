@@ -1,7 +1,12 @@
 from flask import Flask, request, jsonify
 from pathlib import Path
 import csv
+from datetime import datetime, timedelta
 import math
+import os
+import tempfile
+import threading
+import time
 
 
 app = Flask(__name__)
@@ -18,8 +23,15 @@ CSV_FIELDS = [
     "timestamp",
     "temperature",
     "ph",
-    "turbidity"
+    "turbidity",
+    "status"
 ]
+
+EXPECTED_INTERVAL_S = 15
+MISSED_GRACE_S = 5
+MONITOR_INTERVAL_S = 0.25
+CSV_LOCK = threading.Lock()
+NEXT_EXPECTED = {}
 
 
 # -------------------------------------------------------------
@@ -27,21 +39,91 @@ CSV_FIELDS = [
 # -------------------------------------------------------------
 
 def ensure_csv():
-
     if not CSV_FILE.exists():
+        with CSV_FILE.open("w", newline="", encoding="utf-8") as file:
+            csv.DictWriter(file, fieldnames=CSV_FIELDS).writeheader()
+        return
 
-        with CSV_FILE.open(
+    with CSV_FILE.open("r", newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
+        if reader.fieldnames == CSV_FIELDS:
+            return
+
+        rows = list(reader)
+
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
             "w",
             newline="",
-            encoding="utf-8"
+            encoding="utf-8",
+            dir=CSV_FILE.parent,
+            delete=False
         ) as file:
-
-            writer = csv.DictWriter(
-                file,
-                fieldnames=CSV_FIELDS
-            )
-
+            temp_path = Path(file.name)
+            writer = csv.DictWriter(file, fieldnames=CSV_FIELDS)
             writer.writeheader()
+            for old_row in rows:
+                row = {field: old_row.get(field, "") for field in CSV_FIELDS}
+                if not row["status"]:
+                    row["status"] = "RECEIVED"
+                writer.writerow(row)
+        os.replace(temp_path, CSV_FILE)
+    finally:
+        if temp_path and temp_path.exists():
+            temp_path.unlink()
+
+
+def append_row(row):
+    with CSV_FILE.open("a", newline="", encoding="utf-8") as file:
+        csv.DictWriter(file, fieldnames=CSV_FIELDS).writerow(row)
+
+
+def append_missing(node_id, expected_at):
+    append_row({
+        "node_id": node_id,
+        "timestamp": expected_at.isoformat(timespec="seconds"),
+        "temperature": "",
+        "ph": "",
+        "turbidity": "",
+        "status": "NOT_RECEIVED"
+    })
+
+
+def record_overdue(now):
+    for node_id, expected in NEXT_EXPECTED.items():
+        while now >= expected["deadline"]:
+            append_missing(node_id, expected["timestamp"])
+            expected["deadline"] += EXPECTED_INTERVAL_S
+            expected["timestamp"] += timedelta(seconds=EXPECTED_INTERVAL_S)
+
+
+def monitor_missing_messages():
+    while True:
+        time.sleep(MONITOR_INTERVAL_S)
+        with CSV_LOCK:
+            record_overdue(time.monotonic())
+
+
+def record_received(data):
+    now = time.monotonic()
+    received_at = datetime.now().astimezone()
+    with CSV_LOCK:
+        record_overdue(now)
+        append_row({
+            "node_id": data["node_id"],
+            "timestamp": data["timestamp"],
+            "temperature": data["temperature"],
+            "ph": data["ph"] if data["ph"] is not None else "NA",
+            "turbidity": (
+                data["turbidity"] if data["turbidity"] is not None else "NA"
+            ),
+            "status": "RECEIVED"
+        })
+        NEXT_EXPECTED[data["node_id"]] = {
+            "deadline": now + EXPECTED_INTERVAL_S + MISSED_GRACE_S,
+            "timestamp": received_at + timedelta(seconds=EXPECTED_INTERVAL_S)
+        }
 
 
 # -------------------------------------------------------------
@@ -157,45 +239,7 @@ def receive_data():
     # ---------------------------------------------------------
 
     ensure_csv()
-
-
-    # ---------------------------------------------------------
-    # Preparar linha
-    # ---------------------------------------------------------
-
-    row = {
-        "node_id": data["node_id"],
-        "timestamp": data["timestamp"],
-        "temperature": data["temperature"],
-        "ph": (
-            data["ph"]
-            if data["ph"] is not None
-            else "NA"
-        ),
-        "turbidity": (
-            data["turbidity"]
-            if data["turbidity"] is not None
-            else "NA"
-        )
-    }
-
-
-    # ---------------------------------------------------------
-    # Gravar medição
-    # ---------------------------------------------------------
-
-    with CSV_FILE.open(
-        "a",
-        newline="",
-        encoding="utf-8"
-    ) as file:
-
-        writer = csv.DictWriter(
-            file,
-            fieldnames=CSV_FIELDS
-        )
-
-        writer.writerow(row)
+    record_received(data)
 
 
     # ---------------------------------------------------------
@@ -214,6 +258,10 @@ def receive_data():
 if __name__ == "__main__":
 
     ensure_csv()
+    threading.Thread(
+        target=monitor_missing_messages,
+        daemon=True
+    ).start()
 
     app.run(
         host="0.0.0.0",
