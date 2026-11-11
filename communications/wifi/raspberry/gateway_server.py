@@ -18,7 +18,8 @@ CSV_FIELDS = [
     "timestamp",
     "temperature",
     "ph",
-    "turbidity"
+    "turbidity",
+    "rssi"
 ]
 
 
@@ -80,7 +81,7 @@ def receive_data():
 
 
     # ---------------------------------------------------------
-    # Campos obrigatórios
+    # Campos obrigatórios (incluindo rssi)
     # ---------------------------------------------------------
 
     required_fields = [
@@ -88,7 +89,8 @@ def receive_data():
         "timestamp",
         "temperature",
         "ph",
-        "turbidity"
+        "turbidity",
+        "rssi"
     ]
 
 
@@ -152,6 +154,14 @@ def receive_data():
         }), 400
 
 
+    if not is_valid_number(data["rssi"]):
+
+        return jsonify({
+            "status": "error",
+            "message": "rssi invalido"
+        }), 400
+
+
     # ---------------------------------------------------------
     # Garantir que o CSV exista
     # ---------------------------------------------------------
@@ -176,7 +186,8 @@ def receive_data():
             data["turbidity"]
             if data["turbidity"] is not None
             else "NA"
-        )
+        ),
+        "rssi": data["rssi"]
     }
 
 
