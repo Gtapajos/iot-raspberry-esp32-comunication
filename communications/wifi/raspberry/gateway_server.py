@@ -21,6 +21,7 @@ CSV_FILE = Path(__file__).resolve().parent / "gateway.csv"
 CSV_FIELDS = [
     "node_id",
     "timestamp",
+    "rssi",
     "temperature",
     "ph",
     "turbidity",
@@ -83,6 +84,7 @@ def append_missing(node_id, expected_at):
     append_row({
         "node_id": node_id,
         "timestamp": expected_at.isoformat(timespec="seconds"),
+        "rssi": "",
         "temperature": "",
         "ph": "",
         "turbidity": "",
@@ -113,6 +115,7 @@ def record_received(data):
         append_row({
             "node_id": data["node_id"],
             "timestamp": data["timestamp"],
+            "rssi": data.get("rssi", ""),
             "temperature": data["temperature"],
             "ph": data["ph"] if data["ph"] is not None else "NA",
             "turbidity": (
@@ -209,6 +212,13 @@ def receive_data():
         return jsonify({
             "status": "error",
             "message": "temperature invalida"
+        }), 400
+
+    if "rssi" in data and not is_valid_number(data["rssi"]):
+
+        return jsonify({
+            "status": "error",
+            "message": "rssi invalido"
         }), 400
 
 

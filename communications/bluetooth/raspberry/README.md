@@ -35,9 +35,11 @@ gateway estiver parado.
 O arquivo `gateway.csv` tem as colunas:
 
 ```text
-node_id,timestamp,temperature,ph,turbidity,status
+node_id,timestamp,rssi,temperature,ph,turbidity,status
 ```
 
 Medições recebidas têm `status=RECEIVED`; valores `ph` ou `turbidity` nulos
-são gravados como `NA`. Um CSV preexistente com o formato antigo é atualizado
-automaticamente e os registros existentes recebem `status=RECEIVED`.
+são gravados como `NA`. `rssi` contém o sinal recebido pelo Raspberry Pi, em
+dBm; linhas `NOT_RECEIVED` deixam esse campo vazio. Um CSV preexistente é
+atualizado automaticamente, preservando os registros existentes e preenchendo
+campos novos ausentes com valores vazios.

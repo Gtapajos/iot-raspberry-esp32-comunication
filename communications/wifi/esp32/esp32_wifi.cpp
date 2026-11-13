@@ -100,6 +100,7 @@ bool sendMeasurement(
 
     doc["node_id"] = NODE_ID;
     doc["timestamp"] = timestamp;
+    doc["rssi"] = WiFi.RSSI();
 
     if (isfinite(temperature)) {
         doc["temperature"] = temperature;

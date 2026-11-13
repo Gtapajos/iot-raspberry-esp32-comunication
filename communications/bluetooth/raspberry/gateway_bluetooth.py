@@ -16,7 +16,9 @@ from config import (
 )
 
 CSV_FILE = Path(__file__).resolve().parent / "gateway.csv"
-CSV_FIELDS = ["node_id", "timestamp", "temperature", "ph", "turbidity", "status"]
+CSV_FIELDS = [
+    "node_id", "timestamp", "rssi", "temperature", "ph", "turbidity", "status"
+]
 MESSAGE_FIELDS = ["node_id", "timestamp", "temperature", "ph", "turbidity"]
 NEXT_EXPECTED = {}
 
@@ -61,6 +63,7 @@ def record_overdue(now):
             store_row({
                 "node_id": node_id,
                 "timestamp": expected["timestamp"].isoformat(timespec="seconds"),
+                "rssi": "",
                 "temperature": "",
                 "ph": "",
                 "turbidity": "",
@@ -69,12 +72,13 @@ def record_overdue(now):
             expected["deadline"] += EXPECTED_INTERVAL_S
             expected["timestamp"] += timedelta(seconds=EXPECTED_INTERVAL_S)
 
-def store_received(data):
+def store_received(data, rssi):
     now = time.monotonic()
     received_at = datetime.now().astimezone()
     record_overdue(now)
     store_row({
         **data,
+        "rssi": rssi,
         "ph": data["ph"] if data["ph"] is not None else "NA",
         "turbidity": data["turbidity"] if data["turbidity"] is not None else "NA",
         "status": "RECEIVED"
@@ -137,7 +141,7 @@ async def handle_device(device):
             await client.stop_notify(MEASUREMENT_UUID)
             return None
 
-        store_received(data)
+        store_received(data, device.rssi)
         await client.write_gatt_char(ACK_UUID, b"OK", response=True)
 
         print(f"Recebido e armazenado: {data['node_id']} {data['timestamp']}")

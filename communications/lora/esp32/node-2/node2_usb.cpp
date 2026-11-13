@@ -44,7 +44,8 @@ bool sendMeasurement(
     const String& timestamp,
     float temperature,
     float ph,
-    float turbidity
+    float turbidity,
+    float rssi
 )
 {
     // Criar documento JSON
@@ -53,6 +54,7 @@ bool sendMeasurement(
 
     doc["node_id"] = NODE_ID;
     doc["timestamp"] = timestamp;
+    doc["rssi"] = rssi;
 
     if (isfinite(temperature)) {
         doc["temperature"] = temperature;
@@ -141,7 +143,7 @@ bool sendMeasurement(
 // PROCESSAR MENSAGEM RECEBIDA VIA LORA
 // =============================================================
 
-void processLoRaMessage(const String& mensagem)
+void processLoRaMessage(const String& mensagem, float rssi)
 {
     // Interpretar JSON recebido via LoRa
 
@@ -203,7 +205,8 @@ void processLoRaMessage(const String& mensagem)
         timestamp,
         temperature,
         ph,
-        turbidity
+        turbidity,
+        rssi
     );
 
     // Registrar resultado sem enviar texto pela USB
@@ -266,7 +269,7 @@ void loop()
 
         // Processar mensagem recebida
 
-        processLoRaMessage(mensagem);
+        processLoRaMessage(mensagem, radio.getRSSI());
 
     } else if (estado != RADIOLIB_ERR_RX_TIMEOUT) {
 

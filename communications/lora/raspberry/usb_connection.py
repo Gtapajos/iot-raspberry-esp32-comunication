@@ -29,12 +29,13 @@ CSV_FILE = Path(__file__).resolve().parent / "gateway.csv"
 CSV_FIELDS = [
     "node_id",
     "timestamp",
+    "rssi",
     "temperature",
     "ph",
     "turbidity",
     "status",
 ]
-MESSAGE_FIELDS = CSV_FIELDS[:-1]
+MESSAGE_FIELDS = ["node_id", "timestamp", "temperature", "ph", "turbidity"]
 
 # Each node is monitored independently, starting with its first valid packet.
 NEXT_EXPECTED = {}
@@ -104,6 +105,9 @@ def validate_data(data):
         if data[field] is not None and not is_valid_number(data[field]):
             return False, f"{field} invalido"
 
+    if "rssi" in data and not is_valid_number(data["rssi"]):
+        return False, "rssi invalido"
+
     return True, None
 
 
@@ -117,6 +121,7 @@ def record_missing(node_id, expected_at):
     append_row({
         "node_id": node_id,
         "timestamp": expected_at.isoformat(timespec="seconds"),
+        "rssi": "",
         "temperature": "",
         "ph": "",
         "turbidity": "",
@@ -147,6 +152,7 @@ def save_measurement(data):
     append_row({
         "node_id": data["node_id"],
         "timestamp": data["timestamp"],
+        "rssi": data.get("rssi", ""),
         "temperature": data["temperature"],
         "ph": data["ph"] if data["ph"] is not None else "NA",
         "turbidity": data["turbidity"] if data["turbidity"] is not None else "NA",
@@ -171,6 +177,7 @@ def process_message(ser, mensagem):
         print("[USB] Medicao recebida:")
         print("Node ID:", data["node_id"])
         print("Timestamp:", data["timestamp"])
+        print("RSSI:", data.get("rssi", ""))
         print("Temperatura:", data["temperature"])
         print("pH:", data["ph"])
         print("Turbidez:", data["turbidity"])
